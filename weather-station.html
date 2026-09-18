@@ -1,0 +1,1946 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AEROPULSE &mdash; Precision Weather Station & Atmospheric Intelligence</title>
+  <meta name="description" content="Next-generation hyper-local meteorological telemetry, atmospheric instrument dials, dynamic radar maps, and predictive forecasts.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5.3.3 CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <!-- Bootstrap Icons 1.11.3 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --font-display: 'Outfit', sans-serif;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      --bg-dark-base: #060913;
+      --bg-dark-elevated: #0d1322;
+      --bg-dark-card: rgba(18, 25, 44, 0.72);
+      --bg-dark-border: rgba(255, 255, 255, 0.08);
+
+      --glow-rgb: 245, 158, 11;
+      --accent-primary: #f59e0b;
+      --accent-secondary: #38bdf8;
+      --accent-emerald: #10b981;
+      --accent-violet: #a855f7;
+
+      --card-radius: 20px;
+      --glass-blur: blur(20px);
+      --card-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.56);
+      --glow-shadow: 0 0 35px -8px rgba(var(--glow-rgb), 0.35);
+    }
+
+    /* Condition glow modifiers */
+    body.cond-clear { --glow-rgb: 245, 158, 11; --accent-primary: #f59e0b; }
+    body.cond-cloudy { --glow-rgb: 148, 163, 184; --accent-primary: #94a3b8; }
+    body.cond-rain { --glow-rgb: 56, 189, 248; --accent-primary: #38bdf8; }
+    body.cond-storm { --glow-rgb: 168, 85, 247; --accent-primary: #a855f7; }
+    body.cond-snow { --glow-rgb: 224, 242, 254; --accent-primary: #bae6fd; }
+    body.cond-fog { --glow-rgb: 100, 116, 139; --accent-primary: #64748b; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background-color: var(--bg-dark-base);
+      background-image:
+        radial-gradient(1000px 600px at 15% -5%, rgba(var(--glow-rgb), 0.12), transparent 70%),
+        radial-gradient(900px 500px at 85% 15%, rgba(56, 189, 248, 0.12), transparent 60%),
+        linear-gradient(180deg, var(--bg-dark-base) 0%, var(--bg-dark-elevated) 100%);
+      color: #f1f5f9;
+      font-family: var(--font-body);
+      overflow-x: hidden;
+      transition: background 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    /* Ambient Canvas FX */
+    #weatherCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.65;
+    }
+
+    .app-wrapper {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Glassmorphic Components */
+    .glass-card {
+      background: var(--bg-dark-card);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--bg-dark-border);
+      border-radius: var(--card-radius);
+      box-shadow: var(--card-shadow);
+      transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(var(--glow-rgb), 0.28);
+      box-shadow: var(--card-shadow), var(--glow-shadow);
+    }
+
+    .glass-nav {
+      background: rgba(10, 15, 29, 0.75);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-bottom: 1px solid var(--bg-dark-border);
+    }
+
+    /* Typography */
+    .font-display { font-family: var(--font-display); }
+    .font-mono { font-family: var(--font-mono); }
+
+    /* Live Telemetry Dot */
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgb(var(--glow-rgb));
+      display: inline-block;
+      box-shadow: 0 0 12px 2px rgb(var(--glow-rgb));
+      animation: pulse-live 2s infinite ease-in-out;
+    }
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(1.28); }
+    }
+
+    /* Unit toggle pill */
+    .unit-pill-group {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bg-dark-border);
+      border-radius: 50rem;
+      padding: 3px;
+      display: inline-flex;
+    }
+    .unit-pill-btn {
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 14px;
+      border-radius: 50rem;
+      transition: all 0.25s ease;
+    }
+    .unit-pill-btn.active {
+      background: rgba(var(--glow-rgb), 0.25);
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(var(--glow-rgb), 0.4);
+    }
+
+    /* Search bar & Dropdown */
+    .search-container {
+      position: relative;
+    }
+    .search-input-group {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bg-dark-border);
+      border-radius: 16px;
+      padding: 6px 14px;
+      transition: all 0.25s ease;
+    }
+    .search-input-group:focus-within {
+      border-color: rgb(var(--glow-rgb));
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 4px rgba(var(--glow-rgb), 0.15);
+    }
+    .search-input-group input {
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-size: 0.95rem;
+      outline: none;
+      width: 100%;
+    }
+    .search-input-group input::placeholder {
+      color: #64748b;
+    }
+    .suggest-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      background: rgba(13, 19, 34, 0.95);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.6);
+      z-index: 1050;
+      max-height: 380px;
+      overflow-y: auto;
+      display: none;
+    }
+    .suggest-dropdown.show { display: block; }
+    .suggest-item {
+      padding: 10px 18px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      transition: background 0.15s ease;
+    }
+    .suggest-item:last-child { border-bottom: none; }
+    .suggest-item:hover, .suggest-item.active {
+      background: rgba(var(--glow-rgb), 0.15);
+    }
+    .suggest-item .city-name { font-weight: 600; color: #ffffff; }
+    .suggest-item .city-sub { font-size: 0.8rem; color: #94a3b8; }
+
+    /* Quick Chips */
+    .chip-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--bg-dark-border);
+      color: #cbd5e1;
+      font-size: 0.78rem;
+      padding: 6px 14px;
+      border-radius: 50rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .chip-btn:hover {
+      background: rgba(var(--glow-rgb), 0.15);
+      border-color: rgba(var(--glow-rgb), 0.4);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+    .chip-btn.active-chip {
+      background: rgba(var(--glow-rgb), 0.22);
+      border-color: rgb(var(--glow-rgb));
+      color: #ffffff;
+    }
+
+    /* Hero Weather Card */
+    .hero-temp-large {
+      font-family: var(--font-display);
+      font-size: clamp(4.2rem, 8vw, 6.8rem);
+      font-weight: 300;
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+    }
+    .hero-temp-large sup {
+      font-size: 0.45em;
+      font-weight: 300;
+      color: rgb(var(--glow-rgb));
+      vertical-align: 0.5em;
+      margin-left: 4px;
+    }
+    .badge-condition {
+      background: rgba(var(--glow-rgb), 0.18);
+      border: 1px solid rgba(var(--glow-rgb), 0.35);
+      color: #ffffff;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 50rem;
+      font-size: 0.88rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Atmospheric Gauges */
+    .gauge-wrapper {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      margin: 0 auto;
+    }
+    .gauge-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .gauge-track {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.08);
+      stroke-width: 8;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke: rgb(var(--glow-rgb));
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.6s ease;
+    }
+    .gauge-center-val {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      width: 100%;
+    }
+    .gauge-needle-compass {
+      transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: 50% 50%;
+    }
+
+    /* Hourly Forecast Cards & Strip */
+    .hourly-carousel {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.2) transparent;
+    }
+    .hourly-carousel::-webkit-scrollbar { height: 6px; }
+    .hourly-carousel::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: 4px;
+    }
+    .hourly-item {
+      flex: 0 0 92px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--bg-dark-border);
+      border-radius: 16px;
+      padding: 14px 8px;
+      text-align: center;
+      transition: all 0.25s ease;
+    }
+    .hourly-item:hover {
+      background: rgba(var(--glow-rgb), 0.12);
+      border-color: rgba(var(--glow-rgb), 0.3);
+      transform: translateY(-2px);
+    }
+    .hourly-item.now-hour {
+      background: rgba(var(--glow-rgb), 0.18);
+      border-color: rgba(var(--glow-rgb), 0.5);
+    }
+
+    /* 7-Day Range Bars */
+    .day-row-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--bg-dark-border);
+      border-radius: 14px;
+      padding: 12px 18px;
+      transition: all 0.2s ease;
+    }
+    .day-row-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(var(--glow-rgb), 0.25);
+    }
+    .temp-range-bar-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+    }
+    .temp-range-bar-fill {
+      height: 100%;
+      position: absolute;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #38bdf8 0%, rgb(var(--glow-rgb)) 100%);
+    }
+
+    /* Leaflet Station Map */
+    #stationMap {
+      height: 380px;
+      border-radius: var(--card-radius);
+      overflow: hidden;
+      border: 1px solid var(--bg-dark-border);
+      z-index: 2;
+    }
+    .leaflet-popup-content-wrapper {
+      background: rgba(13, 19, 34, 0.9) !important;
+      backdrop-filter: blur(12px) !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      border-radius: 12px !important;
+    }
+    .leaflet-popup-tip {
+      background: rgba(13, 19, 34, 0.9) !important;
+    }
+
+    /* Custom Navigation Tabs */
+    .nav-station-pills .nav-link {
+      color: #94a3b8;
+      font-weight: 600;
+      border-radius: 50rem;
+      padding: 8px 20px;
+      transition: all 0.2s ease;
+    }
+    .nav-station-pills .nav-link.active {
+      background: rgba(var(--glow-rgb), 0.22);
+      color: #ffffff;
+      border: 1px solid rgba(var(--glow-rgb), 0.4);
+      box-shadow: 0 0 16px rgba(var(--glow-rgb), 0.25);
+    }
+
+    /* Shimmer Skeleton */
+    .sk-shimmer {
+      background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 75%);
+      background-size: 200% 100%;
+      animation: sk-loading 1.5s infinite;
+      border-radius: 14px;
+    }
+    @keyframes sk-loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Toast Notification */
+    .custom-toast {
+      background: rgba(13, 19, 34, 0.92);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(var(--glow-rgb), 0.35);
+      border-radius: 16px;
+      color: #ffffff;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    /* Sound Synthesizer button */
+    .btn-ambient-sound.playing {
+      color: rgb(var(--glow-rgb)) !important;
+      border-color: rgb(var(--glow-rgb)) !important;
+      background: rgba(var(--glow-rgb), 0.15) !important;
+    }
+  </style>
+</head>
+
+<body class="cond-clear">
+  <!-- Interactive Ambient Canvas Layer -->
+  <canvas id="weatherCanvas"></canvas>
+
+  <div class="app-wrapper d-flex flex-column min-vh-100">
+    <!-- Main Top Navbar -->
+    <nav class="navbar navbar-expand-lg glass-nav sticky-top py-2">
+      <div class="container-xxl">
+        <a class="navbar-brand d-flex align-items-center gap-2 text-white fw-bold me-4" href="#">
+          <span class="live-dot me-1" id="liveTelemetryDot"></span>
+          <span class="font-display fs-4 tracking-tight">AEROPULSE</span>
+          <span class="badge bg-secondary-subtle text-secondary-emphasis font-mono fw-medium" style="font-size:0.68rem; letter-spacing: 0.05em;">METEOROLOGY v3.0</span>
+        </a>
+
+        <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navStationBar">
+          <i class="bi bi-list text-white fs-3"></i>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navStationBar">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0 nav-station-pills d-flex gap-1" id="viewTabs" role="tablist">
+            <li class="nav-item">
+              <button class="nav-link active" id="tab-overview-btn" data-bs-toggle="pill" data-bs-target="#tab-overview" type="button" role="tab">
+                <i class="bi bi-speedometer2 me-1"></i> Instruments
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tab-charts-btn" data-bs-toggle="pill" data-bs-target="#tab-charts" type="button" role="tab">
+                <i class="bi bi-graph-up-arrow me-1"></i> Analytics & Chart
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tab-radar-btn" data-bs-toggle="pill" data-bs-target="#tab-radar" type="button" role="tab">
+                <i class="bi bi-geo-alt me-1"></i> Live Radar Map
+              </button>
+            </li>
+          </ul>
+
+          <div class="d-flex align-items-center gap-3">
+            <!-- Ambient Audio Generator -->
+            <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 d-flex align-items-center gap-2 btn-ambient-sound" id="btnAudioAmbiance" title="Toggle Atmospheric Ambient Audio">
+              <i class="bi bi-soundwave" id="ambientAudioIcon"></i>
+              <span class="d-none d-sm-inline" id="ambientAudioLabel">Sound: Off</span>
+            </button>
+
+            <!-- Temperature Units Toggle -->
+            <div class="unit-pill-group" role="group" aria-label="Temperature unit selection">
+              <button type="button" class="unit-pill-btn active" id="btnUnitC" aria-pressed="true">°C</button>
+              <button type="button" class="unit-pill-btn" id="btnUnitF" aria-pressed="false">°F</button>
+            </div>
+
+            <!-- Favorite Pin Button -->
+            <button class="btn btn-sm btn-outline-warning rounded-circle p-2" id="btnFavCurrent" title="Bookmark Station" style="width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center;">
+              <i class="bi bi-star" id="favStarIcon"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container-xxl py-4 flex-grow-1">
+      <!-- Search & Quick Navigation Header -->
+      <section class="mb-4">
+        <div class="row g-3 align-items-center justify-content-between">
+          <div class="col-lg-6 col-md-7">
+            <div class="search-container">
+              <div class="search-input-group d-flex align-items-center">
+                <i class="bi bi-search text-secondary me-2 fs-5"></i>
+                <input type="text" id="citySearchInput" placeholder="Search world meteorological station (e.g., Tokyo, London, Colombo, Reykjavik, Sydney)..." autocomplete="off" aria-label="Search city station">
+                <span class="spinner-border spinner-border-sm text-warning ms-2 d-none" id="searchSpinner" role="status"></span>
+                <span class="badge bg-dark text-secondary font-mono ms-2 d-none d-sm-inline" style="font-size:0.7rem;">ENTER ↵</span>
+              </div>
+              <!-- Autocomplete suggestions dropdown -->
+              <div class="suggest-dropdown" id="citySuggestDropdown" role="listbox"></div>
+            </div>
+          </div>
+
+          <div class="col-lg-6 col-md-5 text-md-end">
+            <div class="d-inline-flex align-items-center gap-2 text-secondary font-mono small">
+              <span class="badge bg-success-subtle text-success-emphasis d-inline-flex align-items-center gap-1">
+                <i class="bi bi-check-circle-fill"></i> <span id="dataSourceLabel">Live API &bull; Open-Meteo</span>
+              </span>
+              <span class="text-white-50">Sync: <span id="lastUpdatedClock">Just now</span></span>
+              <button class="btn btn-link text-secondary p-0 text-decoration-none" id="btnRefreshStation" title="Force Refresh">
+                <i class="bi bi-arrow-clockwise fs-6"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Access City Chips -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-3" id="quickChipsContainer">
+          <span class="text-secondary small font-mono me-1"><i class="bi bi-pin-angle"></i> Quick Access:</span>
+          <!-- Dynamic Chips injected via JS -->
+        </div>
+      </section>
+
+      <!-- Skeleton Loading State -->
+      <div id="stationSkeleton" class="d-none">
+        <div class="row g-4 mb-4">
+          <div class="col-12"><div class="sk-shimmer" style="height: 180px;"></div></div>
+          <div class="col-md-4"><div class="sk-shimmer" style="height: 220px;"></div></div>
+          <div class="col-md-4"><div class="sk-shimmer" style="height: 220px;"></div></div>
+          <div class="col-md-4"><div class="sk-shimmer" style="height: 220px;"></div></div>
+          <div class="col-12"><div class="sk-shimmer" style="height: 140px;"></div></div>
+        </div>
+      </div>
+
+      <!-- Station Error / Not Found alert -->
+      <div class="glass-card p-4 text-center my-4 d-none" id="stationNotFoundAlert">
+        <div class="text-warning fs-1 mb-2"><i class="bi bi-exclamation-triangle"></i></div>
+        <h4 class="font-display fw-bold text-white mb-2">Station Coordinates Not Found</h4>
+        <p class="text-secondary mb-3" id="notFoundMsg">We could not retrieve atmospheric telemetry for this location. Please try one of our featured stations or check spelling.</p>
+        <button class="btn btn-outline-warning rounded-pill px-4" onclick="app.loadCity('Colombo')">Load Colombo Observatory</button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="tab-content" id="stationTabContent">
+        <!-- ================= TAB 1: OVERVIEW & INSTRUMENTS ================= -->
+        <div class="tab-pane fade show active" id="tab-overview" role="tabpanel">
+          <!-- Hero Station Banner -->
+          <div class="glass-card p-4 p-md-5 mb-4 position-relative overflow-hidden" id="heroCard">
+            <div class="row align-items-center g-4 position-relative" style="z-index: 2;">
+              <div class="col-lg-7">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span class="badge-condition" id="heroCondBadge">
+                    <i class="bi bi-sun" id="heroCondIcon"></i>
+                    <span id="heroCondText">Clear Skies</span>
+                  </span>
+                  <span class="badge bg-white-10 text-white font-mono px-3 py-1 rounded-pill" id="heroStationTz" style="background: rgba(255,255,255,0.08); font-size:0.75rem;">UTC+5:30</span>
+                </div>
+
+                <h1 class="display-4 fw-bold font-display text-white mb-1 tracking-tight" id="stationTitle">Colombo, Sri Lanka</h1>
+                <p class="text-secondary font-mono small mb-3" id="stationCoordinates">
+                  <i class="bi bi-compass"></i> Lat: 6.9271° N &bull; Lon: 79.8612° E &bull; Elevation: 7m
+                </p>
+
+                <div class="d-flex flex-wrap gap-4 text-secondary small pt-2 border-top border-white-10">
+                  <div><i class="bi bi-clock me-1 text-warning"></i> Station Time: <strong class="text-white font-mono" id="stationLocalTime">12:30 PM</strong></div>
+                  <div><i class="bi bi-thermometer-high me-1 text-danger"></i> High / Low: <strong class="text-white font-mono" id="heroHighLow">31° / 25°</strong></div>
+                  <div><i class="bi bi-droplet-half me-1 text-info"></i> Rain Prob: <strong class="text-white font-mono" id="heroRainChance">15%</strong></div>
+                </div>
+              </div>
+
+              <div class="col-lg-5 text-lg-end text-start">
+                <div class="d-inline-flex flex-column align-items-lg-end">
+                  <div class="d-flex align-items-center gap-3 justify-content-lg-end">
+                    <div id="heroWeatherSvg" style="width: 80px; height: 80px;"></div>
+                    <div class="hero-temp-large text-white" id="heroTemp">
+                      29<sup id="heroUnitSup">°C</sup>
+                    </div>
+                  </div>
+                  <div class="text-secondary font-mono mt-2" style="font-size: 0.95rem;">
+                    Feels like <span class="text-white fw-bold" id="heroFeelsLike">34°C</span> &bull; Dew point: <span class="text-white fw-bold" id="heroDewPoint">24°C</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Key Atmospheric Gauges (Grid of 3 Precision Dials) -->
+          <div class="row g-4 mb-4">
+            <!-- Humidity Gauge -->
+            <div class="col-lg-4 col-md-6">
+              <div class="glass-card p-4 text-center h-100 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <span class="text-uppercase font-mono small text-secondary fw-semibold tracking-wider">
+                    <i class="bi bi-moisture text-info me-1"></i> Relative Humidity
+                  </span>
+                  <span class="badge bg-info-subtle text-info-emphasis rounded-pill" id="humidityStatusBadge">Optimal</span>
+                </div>
+
+                <div class="gauge-wrapper my-2">
+                  <svg class="gauge-svg" viewBox="0 0 140 140">
+                    <circle class="gauge-track" cx="70" cy="70" r="54" />
+                    <circle class="gauge-fill" id="humidityArcFill" cx="70" cy="70" r="54" stroke-dasharray="339" stroke-dashoffset="100" />
+                  </svg>
+                  <div class="gauge-center-val">
+                    <div class="font-display fs-2 fw-bold text-white"><span id="gaugeHumidityVal">85</span><span class="fs-5 fw-normal text-secondary">%</span></div>
+                    <div class="font-mono text-secondary" style="font-size: 0.72rem;">Dew Point: <span id="gaugeDewPointVal">24°C</span></div>
+                  </div>
+                </div>
+
+                <div class="text-secondary small font-mono mt-2" id="humidityDescription">High moisture, tropical condensation likely.</div>
+              </div>
+            </div>
+
+            <!-- Wind Vector & Anemometer Compass -->
+            <div class="col-lg-4 col-md-6">
+              <div class="glass-card p-4 text-center h-100 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <span class="text-uppercase font-mono small text-secondary fw-semibold tracking-wider">
+                    <i class="bi bi-wind text-warning me-1"></i> Wind Vector
+                  </span>
+                  <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" id="windBeaufortBadge">Gentle Breeze</span>
+                </div>
+
+                <div class="gauge-wrapper my-2">
+                  <svg class="gauge-svg" style="transform: none;" viewBox="0 0 140 140">
+                    <!-- Outer Compass Ring -->
+                    <circle cx="70" cy="70" r="62" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" stroke-dasharray="3 5"/>
+                    <circle cx="70" cy="70" r="48" fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+                    <!-- Cardinal Marks -->
+                    <text x="70" y="18" text-anchor="middle" font-size="10" font-weight="700" fill="#f59e0b" font-family="JetBrains Mono">N</text>
+                    <text x="70" y="132" text-anchor="middle" font-size="9" fill="#64748b" font-family="JetBrains Mono">S</text>
+                    <text x="12" y="74" text-anchor="middle" font-size="9" fill="#64748b" font-family="JetBrains Mono">W</text>
+                    <text x="128" y="74" text-anchor="middle" font-size="9" fill="#64748b" font-family="JetBrains Mono">E</text>
+
+                    <!-- Rotating Compass Needle -->
+                    <g id="windCompassNeedle" class="gauge-needle-compass" transform="rotate(230 70 70)">
+                      <polygon points="70,18 64,70 76,70" fill="rgb(var(--glow-rgb))" />
+                      <polygon points="70,122 65,70 75,70" fill="#64748b" opacity="0.6" />
+                      <circle cx="70" cy="70" r="5" fill="#ffffff" />
+                    </g>
+                  </svg>
+                  <div class="gauge-center-val" style="pointer-events: none;">
+                    <div class="font-display fs-3 fw-bold text-white"><span id="gaugeWindVal">16</span> <span class="fs-6 fw-normal text-secondary" id="gaugeWindUnit">km/h</span></div>
+                    <div class="font-mono text-secondary" style="font-size:0.75rem;"><span id="gaugeWindDirText">SW</span> (<span id="gaugeWindDeg">230°</span>)</div>
+                  </div>
+                </div>
+
+                <div class="text-secondary small font-mono mt-2" id="windGustText">Peak gusts up to 24 km/h</div>
+              </div>
+            </div>
+
+            <!-- Barometric Pressure Gauge -->
+            <div class="col-lg-4 col-md-12">
+              <div class="glass-card p-4 text-center h-100 d-flex flex-column justify-content-between">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <span class="text-uppercase font-mono small text-secondary fw-semibold tracking-wider">
+                    <i class="bi bi-speedometer text-emerald me-1"></i> Barometer
+                  </span>
+                  <span class="badge bg-success-subtle text-success-emphasis rounded-pill" id="pressureTendencyBadge">
+                    <i class="bi bi-arrow-right"></i> Steady
+                  </span>
+                </div>
+
+                <div class="gauge-wrapper my-2">
+                  <svg class="gauge-svg" viewBox="0 0 140 140">
+                    <circle class="gauge-track" cx="70" cy="70" r="54" />
+                    <circle class="gauge-fill" id="pressureArcFill" cx="70" cy="70" r="54" stroke-dasharray="339" stroke-dashoffset="140" />
+                  </svg>
+                  <div class="gauge-center-val">
+                    <div class="font-display fs-2 fw-bold text-white"><span id="gaugePressureVal">1006</span></div>
+                    <div class="font-mono text-secondary" style="font-size:0.72rem;">hPa / mbar</div>
+                  </div>
+                </div>
+
+                <div class="text-secondary small font-mono mt-2" id="pressureAltitudeSub">Normal sea-level equilibrium</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Diagnostic Environmental Cards (UV, Air Quality, Visibility, Sun Cycle) -->
+          <div class="row g-4 mb-4">
+            <!-- UV Index -->
+            <div class="col-lg-3 col-md-6">
+              <div class="glass-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="text-secondary font-mono small"><i class="bi bi-brightness-high text-warning me-1"></i> UV INDEX</span>
+                  <span class="badge bg-warning text-dark fw-bold rounded-pill" id="uvIndexBadge">Very High</span>
+                </div>
+                <div class="font-display fs-2 fw-bold text-white my-1" id="uvIndexVal">8.4</div>
+                <div class="progress" style="height: 6px; background: rgba(255,255,255,0.08);">
+                  <div class="progress-bar bg-warning" id="uvProgressBar" style="width: 70%;"></div>
+                </div>
+                <div class="text-secondary small font-mono mt-2" id="uvAdviceText">Sun protection required. Hat & sunscreen recommended.</div>
+              </div>
+            </div>
+
+            <!-- Visibility -->
+            <div class="col-lg-3 col-md-6">
+              <div class="glass-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="text-secondary font-mono small"><i class="bi bi-eye text-info me-1"></i> VISIBILITY</span>
+                  <span class="badge bg-info-subtle text-info-emphasis rounded-pill" id="visibilityBadge">Clear</span>
+                </div>
+                <div class="font-display fs-2 fw-bold text-white my-1"><span id="visibilityVal">10.0</span> <span class="fs-6 fw-normal text-secondary">km</span></div>
+                <div class="progress" style="height: 6px; background: rgba(255,255,255,0.08);">
+                  <div class="progress-bar bg-info" id="visibilityProgressBar" style="width: 95%;"></div>
+                </div>
+                <div class="text-secondary small font-mono mt-2" id="visibilityStatusText">Unobstructed visual horizon.</div>
+              </div>
+            </div>
+
+            <!-- Cloud Cover & Cloud Base -->
+            <div class="col-lg-3 col-md-6">
+              <div class="glass-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="text-secondary font-mono small"><i class="bi bi-clouds text-secondary me-1"></i> CLOUD COVER</span>
+                  <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill" id="cloudCoverBadge">Scattered</span>
+                </div>
+                <div class="font-display fs-2 fw-bold text-white my-1"><span id="cloudCoverVal">65</span><span class="fs-6 fw-normal text-secondary">%</span></div>
+                <div class="progress" style="height: 6px; background: rgba(255,255,255,0.08);">
+                  <div class="progress-bar bg-secondary" id="cloudCoverProgressBar" style="width: 65%;"></div>
+                </div>
+                <div class="text-secondary small font-mono mt-2">Cumulus layer around 1,200m</div>
+              </div>
+            </div>
+
+            <!-- Solar / Daylight Horizon Arc -->
+            <div class="col-lg-3 col-md-6">
+              <div class="glass-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <span class="text-secondary font-mono small"><i class="bi bi-sun-fill text-warning me-1"></i> SOLAR CYCLE</span>
+                  <span class="text-warning font-mono small" id="daylightDuration">12h 06m</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                  <div>
+                    <span class="text-secondary d-block font-mono" style="font-size:0.7rem;"><i class="bi bi-sunrise"></i> Sunrise</span>
+                    <strong class="text-white font-mono" id="sunriseTimeVal">5:58 AM</strong>
+                  </div>
+                  <div class="text-center px-2">
+                    <i class="bi bi-arrow-right-circle text-warning fs-5"></i>
+                  </div>
+                  <div class="text-end">
+                    <span class="text-secondary d-block font-mono" style="font-size:0.7rem;"><i class="bi bi-sunset"></i> Sunset</span>
+                    <strong class="text-white font-mono" id="sunsetTimeVal">6:04 PM</strong>
+                  </div>
+                </div>
+                <div class="text-secondary small font-mono mt-2" id="solarPositionText">Daylight in progress</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 4: 24-Hour Timeline Carousel -->
+          <div class="glass-card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="font-display fw-bold text-white m-0 d-flex align-items-center gap-2">
+                <i class="bi bi-clock-history text-warning"></i> 24-Hour Chronological Forecast
+              </h5>
+              <button class="btn btn-sm btn-outline-secondary rounded-pill font-mono px-3" onclick="document.getElementById('tab-charts-btn').click();">
+                Open Full Chart View <i class="bi bi-arrow-right"></i>
+              </button>
+            </div>
+            <div class="hourly-carousel" id="hourlyCarouselStrip">
+              <!-- Hourly forecast cards generated dynamically -->
+            </div>
+          </div>
+
+          <!-- Section 5: 7-Day Extended Synoptic Outlook -->
+          <div class="glass-card p-4 mb-4">
+            <h5 class="font-display fw-bold text-white mb-3 d-flex align-items-center gap-2">
+              <i class="bi bi-calendar3 text-info"></i> 7-Day Synoptic Outlook
+            </h5>
+            <div class="d-flex flex-column gap-2" id="dailyForecastContainer">
+              <!-- Daily rows generated dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= TAB 2: ANALYTICS & CHART.JS ================= -->
+        <div class="tab-pane fade" id="tab-charts" role="tabpanel">
+          <div class="glass-card p-4 p-md-5 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+              <div>
+                <h4 class="font-display fw-bold text-white mb-1">Atmospheric Trend Analysis</h4>
+                <p class="text-secondary small font-mono m-0">24-hour continuous spline progression of temperature, precipitation probability, and wind velocity.</p>
+              </div>
+              <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-warning active" id="btnChartMetricTemp" onclick="app.setChartMetric('temp')">Temperature</button>
+                <button type="button" class="btn btn-outline-info" id="btnChartMetricRain" onclick="app.setChartMetric('rain')">Precipitation</button>
+                <button type="button" class="btn btn-outline-success" id="btnChartMetricWind" onclick="app.setChartMetric('wind')">Wind Speed</button>
+              </div>
+            </div>
+
+            <div style="position: relative; height: 380px; width: 100%;">
+              <canvas id="weatherTrendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= TAB 3: LIVE RADAR MAP ================= -->
+        <div class="tab-pane fade" id="tab-radar" role="tabpanel">
+          <div class="glass-card p-4 mb-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+              <div>
+                <h4 class="font-display fw-bold text-white mb-1">Geographic Radar & Station Position</h4>
+                <p class="text-secondary small font-mono m-0">Interactive Leaflet satellite observatory telemetry pinpointing the active station coordinates.</p>
+              </div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary rounded-pill" onclick="app.recenterMap()">
+                  <i class="bi bi-crosshair"></i> Recenter Station
+                </button>
+              </div>
+            </div>
+
+            <div id="stationMap"></div>
+            <div class="text-secondary small font-mono mt-3 d-flex justify-content-between flex-wrap gap-2">
+              <span id="mapLayerLegend">OpenStreetMap &bull; Free, No API Key &bull; Real-time station pin with meteorological telemetry tooltip</span>
+              <span id="mapCoordinatesLabel">Lat: 6.9271°, Lon: 79.8612°</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-top border-white-10 py-4 mt-auto" style="background: rgba(6, 9, 19, 0.85); backdrop-filter: blur(12px);">
+      <div class="container-xxl d-flex flex-wrap justify-content-between align-items-center gap-3 text-secondary font-mono small">
+        <div class="d-flex align-items-center gap-2">
+          <span class="live-dot" style="width:6px; height:6px;"></span>
+          <span>AEROPULSE Precision Meteorological Telemetry Station &bull; Built with Bootstrap 5, Chart.js & Leaflet</span>
+        </div>
+        <div>
+          <span>Data Sources: Open-Meteo Global Forecasting Engine & Local Precision Model</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+    <div id="stationToast" class="toast custom-toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex align-items-center p-3">
+        <i class="bi bi-info-circle text-warning fs-5 me-3"></i>
+        <div class="toast-body p-0 flex-grow-1" id="toastMessage">Station telemetry updated successfully.</div>
+        <button type="button" class="btn-close btn-close-white ms-3" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5.3.3 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js 4.4.4 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- Leaflet 1.9.4 CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Application Logic -->
+  <script>
+    (function () {
+      "use strict";
+
+      /* ==========================================================
+       * 1. Rich Predefined Global Station Database (Instant & Offline)
+       * ========================================================== */
+      const PRESET_STATIONS = [
+        {
+          name: "Colombo", country: "Sri Lanka", lat: 6.9271, lon: 79.8612, tz: "UTC+5:30", cond: "rain",
+          tempC: 29, feelsC: 34, dewPointC: 24, humidity: 85, windKph: 16, windDir: 230, pressure: 1006,
+          uvIndex: 8.4, visibilityKm: 9.5, cloudCover: 78, sunrise: "5:58 AM", sunset: "6:04 PM",
+          hourly: generateHourlyData(13, [[29, "rain", 80], [28, "rain", 75], [27, "storm", 90], [27, "rain", 60], [26, "cloudy", 30], [26, "cloudy", 20], [25, "cloudy", 15], [25, "clear", 5]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[30, 25, "rain"], [31, 25, "storm"], [30, 24, "rain"], [29, 24, "cloudy"], [30, 25, "clear"], [31, 25, "clear"], [30, 25, "rain"]])
+        },
+        {
+          name: "Jaffna", country: "Sri Lanka", lat: 9.6615, lon: 80.0255, tz: "UTC+5:30", cond: "clear",
+          tempC: 32, feelsC: 36, dewPointC: 22, humidity: 62, windKph: 22, windDir: 260, pressure: 1008,
+          uvIndex: 10.2, visibilityKm: 12.0, cloudCover: 15, sunrise: "5:52 AM", sunset: "5:58 PM",
+          hourly: generateHourlyData(13, [[32, "clear", 0], [31, "clear", 0], [30, "clear", 5], [29, "cloudy", 10], [28, "clear", 0], [27, "clear", 0], [27, "clear", 0], [26, "clear", 0]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[33, 26, "clear"], [33, 26, "clear"], [32, 26, "cloudy"], [32, 25, "clear"], [33, 26, "clear"], [34, 26, "clear"], [33, 26, "clear"]])
+        },
+        {
+          name: "Point Pedro", country: "Sri Lanka", lat: 9.8247, lon: 80.2312, tz: "UTC+5:30", cond: "clear",
+          tempC: 31, feelsC: 35, dewPointC: 23, humidity: 66, windKph: 24, windDir: 255, pressure: 1008,
+          uvIndex: 9.8, visibilityKm: 11.5, cloudCover: 20, sunrise: "5:51 AM", sunset: "5:57 PM",
+          hourly: generateHourlyData(13, [[31, "clear", 5], [30, "clear", 5], [29, "clear", 5], [29, "cloudy", 10], [28, "cloudy", 15], [27, "clear", 0], [27, "clear", 0], [26, "clear", 0]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[32, 26, "clear"], [32, 25, "clear"], [31, 25, "cloudy"], [31, 25, "clear"], [32, 26, "clear"], [32, 26, "clear"], [31, 25, "cloudy"]])
+        },
+        {
+          name: "London", country: "United Kingdom", lat: 51.5074, lon: -0.1278, tz: "UTC+1", cond: "cloudy",
+          tempC: 16, feelsC: 15, dewPointC: 11, humidity: 71, windKph: 19, windDir: 210, pressure: 1014,
+          uvIndex: 3.5, visibilityKm: 10.0, cloudCover: 85, sunrise: "6:41 AM", sunset: "7:22 PM",
+          hourly: generateHourlyData(13, [[16, "cloudy", 20], [16, "cloudy", 30], [15, "rain", 70], [14, "rain", 80], [13, "cloudy", 40], [12, "fog", 20], [12, "fog", 10], [11, "cloudy", 10]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[17, 11, "cloudy"], [15, 10, "rain"], [16, 10, "cloudy"], [18, 12, "clear"], [17, 11, "cloudy"], [16, 10, "rain"], [17, 11, "clear"]])
+        },
+        {
+          name: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503, tz: "UTC+9", cond: "clear",
+          tempC: 24, feelsC: 24, dewPointC: 14, humidity: 55, windKph: 11, windDir: 70, pressure: 1018,
+          uvIndex: 6.2, visibilityKm: 14.0, cloudCover: 25, sunrise: "5:24 AM", sunset: "5:33 PM",
+          hourly: generateHourlyData(13, [[24, "clear", 0], [24, "clear", 0], [23, "clear", 0], [22, "cloudy", 10], [21, "clear", 0], [20, "clear", 0], [19, "clear", 0], [19, "fog", 5]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[25, 17, "clear"], [24, 17, "cloudy"], [23, 16, "clear"], [24, 16, "clear"], [25, 18, "clear"], [26, 18, "clear"], [24, 17, "rain"]])
+        },
+        {
+          name: "New York", country: "United States", lat: 40.7128, lon: -74.0060, tz: "UTC-4", cond: "storm",
+          tempC: 21, feelsC: 22, dewPointC: 18, humidity: 78, windKph: 31, windDir: 190, pressure: 1002,
+          uvIndex: 4.8, visibilityKm: 8.0, cloudCover: 90, sunrise: "6:47 AM", sunset: "7:04 PM",
+          hourly: generateHourlyData(13, [[21, "storm", 90], [20, "storm", 85], [20, "rain", 70], [19, "rain", 55], [18, "cloudy", 30], [18, "cloudy", 20], [17, "clear", 10], [17, "clear", 5]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[22, 17, "storm"], [20, 15, "rain"], [21, 15, "cloudy"], [23, 16, "clear"], [22, 16, "clear"], [24, 17, "clear"], [23, 16, "cloudy"]])
+        },
+        {
+          name: "Reykjavik", country: "Iceland", lat: 64.1466, lon: -21.9426, tz: "UTC+0", cond: "snow",
+          tempC: -2, feelsC: -7, dewPointC: -5, humidity: 80, windKph: 34, windDir: 300, pressure: 996,
+          uvIndex: 0.8, visibilityKm: 6.5, cloudCover: 95, sunrise: "10:52 AM", sunset: "3:58 PM",
+          hourly: generateHourlyData(13, [[-2, "snow", 80], [-2, "snow", 75], [-3, "snow", 60], [-3, "cloudy", 30], [-4, "cloudy", 20], [-4, "fog", 15], [-5, "fog", 10], [-5, "cloudy", 10]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[-1, -6, "snow"], [0, -5, "cloudy"], [-2, -7, "snow"], [-3, -8, "snow"], [-1, -6, "cloudy"], [0, -4, "cloudy"], [-2, -7, "snow"]])
+        },
+        {
+          name: "Dubai", country: "United Arab Emirates", lat: 25.2048, lon: 55.2708, tz: "UTC+4", cond: "clear",
+          tempC: 40, feelsC: 44, dewPointC: 19, humidity: 35, windKph: 14, windDir: 280, pressure: 1004,
+          uvIndex: 11.5, visibilityKm: 16.0, cloudCover: 5, sunrise: "5:41 AM", sunset: "6:34 PM",
+          hourly: generateHourlyData(13, [[40, "clear", 0], [40, "clear", 0], [39, "clear", 0], [38, "clear", 0], [36, "clear", 0], [34, "clear", 0], [33, "clear", 0], [32, "clear", 0]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[41, 30, "clear"], [41, 29, "clear"], [42, 30, "clear"], [41, 30, "clear"], [40, 29, "clear"], [41, 29, "clear"], [42, 30, "clear"]])
+        },
+        {
+          name: "Sydney", country: "Australia", lat: -33.8688, lon: 151.2093, tz: "UTC+10", cond: "cloudy",
+          tempC: 18, feelsC: 17, dewPointC: 12, humidity: 64, windKph: 26, windDir: 150, pressure: 1016,
+          uvIndex: 5.4, visibilityKm: 12.0, cloudCover: 70, sunrise: "6:31 AM", sunset: "5:33 PM",
+          hourly: generateHourlyData(13, [[18, "cloudy", 15], [18, "cloudy", 25], [17, "rain", 60], [16, "rain", 70], [16, "cloudy", 35], [15, "clear", 10], [14, "clear", 0], [13, "clear", 0]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[19, 13, "cloudy"], [17, 12, "rain"], [18, 12, "cloudy"], [20, 13, "clear"], [19, 13, "clear"], [21, 14, "clear"], [20, 13, "cloudy"]])
+        },
+        {
+          name: "Paris", country: "France", lat: 48.8566, lon: 2.3522, tz: "UTC+1", cond: "clear",
+          tempC: 19, feelsC: 18, dewPointC: 10, humidity: 58, windKph: 13, windDir: 240, pressure: 1017,
+          uvIndex: 4.6, visibilityKm: 12.0, cloudCover: 20, sunrise: "7:12 AM", sunset: "7:38 PM",
+          hourly: generateHourlyData(13, [[19, "clear", 0], [19, "clear", 0], [18, "clear", 0], [17, "cloudy", 10], [16, "cloudy", 15], [15, "clear", 5], [14, "clear", 0], [13, "clear", 0]]),
+          daily: generateDailyData(["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"], [[20, 12, "clear"], [19, 12, "cloudy"], [18, 11, "rain"], [20, 12, "clear"], [21, 13, "clear"], [22, 13, "clear"], [20, 12, "cloudy"]])
+        }
+      ];
+
+      function generateHourlyData(startHour, list) {
+        return list.map(function (item, i) {
+          const h = (startHour + i) % 24;
+          const label = h === 0 ? "12 AM" : h === 12 ? "12 PM" : (h > 12 ? (h - 12) + " PM" : h + " AM");
+          return { time: label, hourNum: h, tempC: item[0], cond: item[1], rainProb: item[2] || 0 };
+        });
+      }
+
+      function generateDailyData(names, list) {
+        return list.map(function (item, i) {
+          return { day: names[i] || "Day " + (i + 1), hiC: item[0], loC: item[1], cond: item[2] };
+        });
+      }
+
+      /* ==========================================================
+       * 2. SVG Weather Icons Library
+       * ========================================================== */
+      const SVG_ICONS = {
+        clear: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><circle cx="32" cy="32" r="13" fill="rgb(var(--glow-rgb))"/><g stroke="rgb(var(--glow-rgb))" stroke-width="3" stroke-linecap="round">' +
+            [0, 45, 90, 135, 180, 225, 270, 315].map(function (a) {
+              const r1 = 20, r2 = 28, rad = a * Math.PI / 180;
+              return '<line x1="' + (32 + r1 * Math.cos(rad)) + '" y1="' + (32 + r1 * Math.sin(rad)) + '" x2="' + (32 + r2 * Math.cos(rad)) + '" y2="' + (32 + r2 * Math.sin(rad)) + '"/>';
+            }).join('') + '</g></svg>';
+        },
+        cloudy: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><path d="M18 42a11 11 0 0 1 -2-21.8 14 14 0 0 1 27-4A12 12 0 0 1 50 42z" fill="rgba(148, 163, 184, 0.25)" stroke="#94a3b8" stroke-width="3.5" stroke-linejoin="round"/></svg>';
+        },
+        rain: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><path d="M18 36a11 11 0 0 1 -2-21.8 14 14 0 0 1 27-4A12 12 0 0 1 50 36z" fill="rgba(56, 189, 248, 0.2)" stroke="#38bdf8" stroke-width="3.5" stroke-linejoin="round"/>' +
+            '<g stroke="#38bdf8" stroke-width="3" stroke-linecap="round"><line x1="22" y1="44" x2="18" y2="54"/><line x1="33" y1="44" x2="29" y2="54"/><line x1="44" y1="44" x2="40" y2="54"/></g></svg>';
+        },
+        storm: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><path d="M18 34a11 11 0 0 1 -2-21.8 14 14 0 0 1 27-4A12 12 0 0 1 50 34z" fill="rgba(168, 85, 247, 0.25)" stroke="#a855f7" stroke-width="3.5" stroke-linejoin="round"/>' +
+            '<path d="M34 38 L25 51 L32 51 L26 62 L41 46 L33 46 Z" fill="rgb(var(--glow-rgb))" stroke="#f59e0b" stroke-width="1"/></svg>';
+        },
+        snow: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><path d="M18 34a11 11 0 0 1 -2-21.8 14 14 0 0 1 27-4A12 12 0 0 1 50 34z" fill="rgba(224, 242, 254, 0.2)" stroke="#bae6fd" stroke-width="3.5" stroke-linejoin="round"/>' +
+            '<g stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">' +
+            [22, 33, 44].map(function (x) {
+              return '<g transform="translate(' + x + ' 50)">' + [0, 60, 120].map(function (a) {
+                const rad = a * Math.PI / 180, r = 5.5;
+                return '<line x1="' + (-r * Math.cos(rad)) + '" y1="' + (-r * Math.sin(rad)) + '" x2="' + (r * Math.cos(rad)) + '" y2="' + (r * Math.sin(rad)) + '"/>';
+              }).join('') + '</g>';
+            }).join('') + '</g></svg>';
+        },
+        fog: function (sz) {
+          return '<svg viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '"><g stroke="#94a3b8" stroke-width="3.5" stroke-linecap="round">' +
+            '<line x1="12" y1="24" x2="52" y2="24"/><line x1="16" y1="33" x2="48" y2="33"/><line x1="10" y1="42" x2="54" y2="42"/></g></svg>';
+        }
+      };
+
+      function getConditionMeta(cond) {
+        switch (cond) {
+          case 'rain': return { label: "Light Rain & Showers", icon: "bi-cloud-rain" };
+          case 'storm': return { label: "Thunderstorm Activity", icon: "bi-cloud-lightning-rain" };
+          case 'snow': return { label: "Snow Flurries", icon: "bi-snow" };
+          case 'cloudy': return { label: "Overcast & Cloudy", icon: "bi-cloud" };
+          case 'fog': return { label: "Dense Fog Horizon", icon: "bi-cloud-haze" };
+          case 'clear':
+          default: return { label: "Clear & Sunny Skies", icon: "bi-sun" };
+        }
+      }
+
+      /* ==========================================================
+       * 3. Ambient Audio Synthesizer (Web Audio API)
+       * ========================================================== */
+      class AmbientAudioEngine {
+        constructor() {
+          this.ctx = null;
+          this.isPlaying = false;
+          this.nodes = [];
+        }
+
+        toggle(condition) {
+          if (this.isPlaying) {
+            this.stop();
+            return false;
+          } else {
+            this.play(condition);
+            return true;
+          }
+        }
+
+        play(condition) {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!this.ctx) this.ctx = new AudioCtx();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+
+            this.stop();
+            this.isPlaying = true;
+
+            // Generate relaxing brown noise for wind/rain
+            const bufferSize = this.ctx.sampleRate * 2;
+            const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            let lastOut = 0.0;
+            for (let i = 0; i < bufferSize; i++) {
+              const white = Math.random() * 2 - 1;
+              output[i] = (lastOut + (0.02 * white)) / 1.02;
+              lastOut = output[i];
+              output[i] *= 3.5;
+            }
+
+            const whiteNoise = this.ctx.createBufferSource();
+            whiteNoise.buffer = noiseBuffer;
+            whiteNoise.loop = true;
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = condition === 'rain' || condition === 'storm' ? 'bandpass' : 'lowpass';
+            filter.frequency.value = condition === 'rain' ? 800 : 450;
+            filter.Q.value = 1.0;
+
+            const gainNode = this.ctx.createGain();
+            gainNode.gain.setValueAtTime(0.01, this.ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.12, this.ctx.currentTime + 2);
+
+            whiteNoise.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(this.ctx.destination);
+
+            whiteNoise.start();
+            this.nodes = [whiteNoise, filter, gainNode];
+          } catch (e) {
+            console.warn("Ambient audio context not permitted:", e);
+            this.isPlaying = false;
+          }
+        }
+
+        stop() {
+          this.nodes.forEach(node => {
+            try {
+              if (node.stop) node.stop();
+              node.disconnect();
+            } catch (e) {}
+          });
+          this.nodes = [];
+          this.isPlaying = false;
+        }
+      }
+
+      /* ==========================================================
+       * 4. Ambient Weather Particles Canvas FX
+       * ========================================================== */
+      class WeatherFXCanvas {
+        constructor(canvasId) {
+          this.canvas = document.getElementById(canvasId);
+          this.ctx = this.canvas.getContext('2d');
+          this.particles = [];
+          this.currentCond = 'clear';
+          this.width = 0;
+          this.height = 0;
+          this.animId = null;
+
+          this.resize();
+          window.addEventListener('resize', () => this.resize());
+          this.initParticles();
+          this.animate();
+        }
+
+        resize() {
+          this.width = this.canvas.width = window.innerWidth;
+          this.height = this.canvas.height = window.innerHeight;
+        }
+
+        setCondition(cond) {
+          this.currentCond = cond;
+          this.initParticles();
+        }
+
+        initParticles() {
+          this.particles = [];
+          const count = this.currentCond === 'rain' ? 90 : this.currentCond === 'storm' ? 120 : this.currentCond === 'snow' ? 70 : 45;
+
+          for (let i = 0; i < count; i++) {
+            this.particles.push({
+              x: Math.random() * this.width,
+              y: Math.random() * this.height,
+              speed: Math.random() * 4 + (this.currentCond === 'rain' || this.currentCond === 'storm' ? 8 : 1),
+              length: Math.random() * 15 + 10,
+              radius: Math.random() * 2.5 + 1,
+              alpha: Math.random() * 0.5 + 0.2,
+              drift: Math.random() * 1.5 - 0.75
+            });
+          }
+        }
+
+        animate() {
+          this.ctx.clearRect(0, 0, this.width, this.height);
+
+          if (this.currentCond === 'rain' || this.currentCond === 'storm') {
+            this.ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            this.ctx.lineWidth = 1.6;
+            this.ctx.beginPath();
+            this.particles.forEach(p => {
+              this.ctx.moveTo(p.x, p.y);
+              this.ctx.lineTo(p.x - 2, p.y + p.length);
+              p.y += p.speed;
+              p.x -= 0.6;
+              if (p.y > this.height) { p.y = -20; p.x = Math.random() * this.width; }
+            });
+            this.ctx.stroke();
+          } else if (this.currentCond === 'snow') {
+            this.ctx.fillStyle = 'rgba(240, 249, 255, 0.65)';
+            this.particles.forEach(p => {
+              this.ctx.beginPath();
+              this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+              this.ctx.fill();
+              p.y += p.speed * 0.4;
+              p.x += Math.sin(p.y * 0.02) * 0.8;
+              if (p.y > this.height) { p.y = -10; p.x = Math.random() * this.width; }
+            });
+          } else {
+            // Calm atmospheric ambient stars/dust particles
+            this.particles.forEach(p => {
+              this.ctx.fillStyle = `rgba(245, 158, 11, ${p.alpha * 0.35})`;
+              this.ctx.beginPath();
+              this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+              this.ctx.fill();
+              p.y -= 0.3;
+              p.x += p.drift * 0.2;
+              if (p.y < 0) { p.y = this.height; p.x = Math.random() * this.width; }
+            });
+          }
+
+          this.animId = requestAnimationFrame(() => this.animate());
+        }
+      }
+
+      /* ==========================================================
+       * 5. Main Weather Station Application Controller
+       * ========================================================== */
+      class WeatherStationApp {
+        constructor() {
+          this.unit = localStorage.getItem("aeropulse.unit") || "C";
+          this.favorites = this.loadFavorites();
+          this.currentStation = null;
+          this.chartMetric = 'temp';
+          this.trendChart = null;
+          this.stationMap = null;
+          this.stationMapMarker = null;
+          this.audioEngine = new AmbientAudioEngine();
+          this.fxCanvas = new WeatherFXCanvas('weatherCanvas');
+
+          this.cacheDOMElements();
+          this.bindEvents();
+          this.init();
+        }
+
+        cacheDOMElements() {
+          this.els = {
+            citySearchInput: document.getElementById('citySearchInput'),
+            citySuggestDropdown: document.getElementById('citySuggestDropdown'),
+            searchSpinner: document.getElementById('searchSpinner'),
+            btnUnitC: document.getElementById('btnUnitC'),
+            btnUnitF: document.getElementById('btnUnitF'),
+            btnFavCurrent: document.getElementById('btnFavCurrent'),
+            favStarIcon: document.getElementById('favStarIcon'),
+            btnAudioAmbiance: document.getElementById('btnAudioAmbiance'),
+            ambientAudioIcon: document.getElementById('ambientAudioIcon'),
+            ambientAudioLabel: document.getElementById('ambientAudioLabel'),
+            btnRefreshStation: document.getElementById('btnRefreshStation'),
+            quickChipsContainer: document.getElementById('quickChipsContainer'),
+            stationSkeleton: document.getElementById('stationSkeleton'),
+            stationTabContent: document.getElementById('stationTabContent'),
+            stationNotFoundAlert: document.getElementById('stationNotFoundAlert'),
+            stationTitle: document.getElementById('stationTitle'),
+            stationCoordinates: document.getElementById('stationCoordinates'),
+            stationLocalTime: document.getElementById('stationLocalTime'),
+            heroHighLow: document.getElementById('heroHighLow'),
+            heroRainChance: document.getElementById('heroRainChance'),
+            heroTemp: document.getElementById('heroTemp'),
+            heroUnitSup: document.getElementById('heroUnitSup'),
+            heroFeelsLike: document.getElementById('heroFeelsLike'),
+            heroDewPoint: document.getElementById('heroDewPoint'),
+            heroCondBadge: document.getElementById('heroCondBadge'),
+            heroCondIcon: document.getElementById('heroCondIcon'),
+            heroCondText: document.getElementById('heroCondText'),
+            heroWeatherSvg: document.getElementById('heroWeatherSvg'),
+            heroStationTz: document.getElementById('heroStationTz'),
+            gaugeHumidityVal: document.getElementById('gaugeHumidityVal'),
+            gaugeDewPointVal: document.getElementById('gaugeDewPointVal'),
+            humidityArcFill: document.getElementById('humidityArcFill'),
+            humidityStatusBadge: document.getElementById('humidityStatusBadge'),
+            gaugeWindVal: document.getElementById('gaugeWindVal'),
+            gaugeWindUnit: document.getElementById('gaugeWindUnit'),
+            gaugeWindDirText: document.getElementById('gaugeWindDirText'),
+            gaugeWindDeg: document.getElementById('gaugeWindDeg'),
+            windCompassNeedle: document.getElementById('windCompassNeedle'),
+            windBeaufortBadge: document.getElementById('windBeaufortBadge'),
+            windGustText: document.getElementById('windGustText'),
+            gaugePressureVal: document.getElementById('gaugePressureVal'),
+            pressureArcFill: document.getElementById('pressureArcFill'),
+            pressureTendencyBadge: document.getElementById('pressureTendencyBadge'),
+            uvIndexVal: document.getElementById('uvIndexVal'),
+            uvIndexBadge: document.getElementById('uvIndexBadge'),
+            uvProgressBar: document.getElementById('uvProgressBar'),
+            visibilityVal: document.getElementById('visibilityVal'),
+            visibilityBadge: document.getElementById('visibilityBadge'),
+            visibilityProgressBar: document.getElementById('visibilityProgressBar'),
+            cloudCoverVal: document.getElementById('cloudCoverVal'),
+            cloudCoverProgressBar: document.getElementById('cloudCoverProgressBar'),
+            sunriseTimeVal: document.getElementById('sunriseTimeVal'),
+            sunsetTimeVal: document.getElementById('sunsetTimeVal'),
+            hourlyCarouselStrip: document.getElementById('hourlyCarouselStrip'),
+            dailyForecastContainer: document.getElementById('dailyForecastContainer'),
+            lastUpdatedClock: document.getElementById('lastUpdatedClock'),
+            dataSourceLabel: document.getElementById('dataSourceLabel'),
+            toastEl: document.getElementById('stationToast'),
+            toastMessage: document.getElementById('toastMessage')
+          };
+          this.toast = new bootstrap.Toast(this.els.toastEl, { delay: 3500 });
+        }
+
+        bindEvents() {
+          // Unit switching
+          this.els.btnUnitC.addEventListener('click', () => this.setUnit('C'));
+          this.els.btnUnitF.addEventListener('click', () => this.setUnit('F'));
+
+          // Search input & Debounced live suggestions
+          let debounceTimeout = null;
+          this.els.citySearchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimeout);
+            const val = e.target.value.trim();
+            if (val.length < 2) {
+              this.hideSuggestions();
+              return;
+            }
+            debounceTimeout = setTimeout(() => this.searchLocations(val), 280);
+          });
+
+          this.els.citySearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              const query = this.els.citySearchInput.value.trim();
+              if (query) {
+                this.hideSuggestions();
+                this.loadCity(query);
+              }
+            } else if (e.key === 'Escape') {
+              this.hideSuggestions();
+            }
+          });
+
+          document.addEventListener('click', (e) => {
+            if (!this.els.citySearchInput.contains(e.target) && !this.els.citySuggestDropdown.contains(e.target)) {
+              this.hideSuggestions();
+            }
+          });
+
+          // Refresh button
+          this.els.btnRefreshStation.addEventListener('click', () => {
+            if (this.currentStation) {
+              this.showToast(`Refreshing telemetry for ${this.currentStation.name}...`);
+              this.loadCity(this.currentStation.name);
+            }
+          });
+
+          // Favorite Toggle
+          this.els.btnFavCurrent.addEventListener('click', () => {
+            if (!this.currentStation) return;
+            this.toggleFavorite(this.currentStation.name);
+          });
+
+          // Audio Ambient Toggle
+          this.els.btnAudioAmbiance.addEventListener('click', () => {
+            const cond = this.currentStation ? this.currentStation.cond : 'clear';
+            const isPlaying = this.audioEngine.toggle(cond);
+            if (isPlaying) {
+              this.els.btnAudioAmbiance.classList.add('playing');
+              this.els.ambientAudioIcon.className = 'bi bi-volume-up-fill';
+              this.els.ambientAudioLabel.textContent = 'Sound: Live';
+              this.showToast('Ambient atmospheric audio generator active.');
+            } else {
+              this.els.btnAudioAmbiance.classList.remove('playing');
+              this.els.ambientAudioIcon.className = 'bi bi-soundwave';
+              this.els.ambientAudioLabel.textContent = 'Sound: Off';
+            }
+          });
+
+          // Map tab initialization fix
+          document.getElementById('tab-radar-btn').addEventListener('shown.bs.tab', () => {
+            if (this.stationMap) {
+              this.stationMap.invalidateSize();
+              this.recenterMap();
+            }
+          });
+        }
+
+        init() {
+          this.renderQuickChips();
+          this.setUnit(this.unit, true);
+          this.initLeafletMap();
+          this.initChart();
+
+          const startCity = this.favorites[0] || "Colombo";
+          this.loadCity(startCity);
+
+          // Station local time ticker
+          setInterval(() => this.updateClock(), 1000);
+        }
+
+        /* ---------------- Temperature & Units ---------------- */
+        cToF(c) { return Math.round(c * 9 / 5 + 32); }
+        fmtTemp(c) { return this.unit === 'C' ? Math.round(c) : this.cToF(c); }
+
+        setUnit(u, skipToast) {
+          this.unit = u;
+          localStorage.setItem("aeropulse.unit", u);
+          this.els.btnUnitC.classList.toggle('active', u === 'C');
+          this.els.btnUnitF.classList.toggle('active', u === 'F');
+          this.els.btnUnitC.setAttribute('aria-pressed', u === 'C');
+          this.els.btnUnitF.setAttribute('aria-pressed', u === 'F');
+
+          if (this.currentStation) {
+            this.renderStationTelemetry(this.currentStation);
+            this.updateChartData();
+          }
+          if (!skipToast) this.showToast(`Display temperature units converted to °${u}`);
+        }
+
+        /* ---------------- Favorites ---------------- */
+        loadFavorites() {
+          try {
+            const raw = localStorage.getItem("aeropulse.favorites");
+            return raw ? JSON.parse(raw) : ["Colombo", "Jaffna", "London", "Tokyo", "Reykjavik", "Dubai"];
+          } catch (e) {
+            return ["Colombo", "Jaffna", "London", "Tokyo"];
+          }
+        }
+
+        toggleFavorite(cityName) {
+          const idx = this.favorites.indexOf(cityName);
+          if (idx !== -1) {
+            this.favorites.splice(idx, 1);
+            this.showToast(`Removed ${cityName} from favorites.`);
+          } else {
+            this.favorites.unshift(cityName);
+            this.showToast(`Pinned ${cityName} to quick access favorites!`);
+          }
+          localStorage.setItem("aeropulse.favorites", JSON.stringify(this.favorites));
+          this.renderQuickChips();
+          this.updateFavoriteIcon();
+        }
+
+        updateFavoriteIcon() {
+          if (!this.currentStation) return;
+          const isFav = this.favorites.includes(this.currentStation.name);
+          this.els.favStarIcon.className = isFav ? "bi bi-star-fill text-warning" : "bi bi-star";
+        }
+
+        renderQuickChips() {
+          this.els.quickChipsContainer.querySelectorAll('.chip-btn').forEach(c => c.remove());
+          this.favorites.slice(0, 8).forEach(name => {
+            const btn = document.createElement('button');
+            btn.className = 'chip-btn' + (this.currentStation && this.currentStation.name.toLowerCase() === name.toLowerCase() ? ' active-chip' : '');
+            btn.type = 'button';
+            btn.innerHTML = `<i class="bi bi-geo-alt"></i> ${name}`;
+            btn.addEventListener('click', () => this.loadCity(name));
+            this.els.quickChipsContainer.appendChild(btn);
+          });
+        }
+
+        /* ---------------- Search & Autocomplete ---------------- */
+        async searchLocations(query) {
+          this.els.searchSpinner.classList.remove('d-none');
+          const normalized = query.toLowerCase();
+
+          // Search presets first
+          let matches = PRESET_STATIONS.filter(s =>
+            s.name.toLowerCase().includes(normalized) || s.country.toLowerCase().includes(normalized)
+          ).map(s => ({ name: s.name, country: s.country, lat: s.lat, lon: s.lon, isPreset: true }));
+
+          // Query Open-Meteo Geocoding API for worldwide coverage
+          try {
+            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.results && data.results.length) {
+                data.results.forEach(r => {
+                  if (!matches.some(m => m.name.toLowerCase() === r.name.toLowerCase())) {
+                    matches.push({
+                      name: r.name,
+                      country: r.country || r.admin1 || "",
+                      lat: r.latitude,
+                      lon: r.longitude,
+                      isPreset: false
+                    });
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            // Offline or rate-limited; preset results remain intact
+          }
+
+          this.els.searchSpinner.classList.add('d-none');
+          this.renderSuggestions(matches);
+        }
+
+        renderSuggestions(list) {
+          if (!list || !list.length) {
+            this.hideSuggestions();
+            return;
+          }
+          this.els.citySuggestDropdown.innerHTML = list.map(item => `
+            <div class="suggest-item" data-name="${item.name}" data-lat="${item.lat}" data-lon="${item.lon}">
+              <div>
+                <div class="city-name"><i class="bi bi-geo-alt text-warning me-1"></i> ${item.name}</div>
+                <div class="city-sub">${item.country} &bull; ${item.lat.toFixed(2)}°, ${item.lon.toFixed(2)}°</div>
+              </div>
+              <span class="badge ${item.isPreset ? 'bg-secondary' : 'bg-primary'} rounded-pill" style="font-size:0.65rem;">
+                ${item.isPreset ? 'Preset' : 'Global Geo'}
+              </span>
+            </div>
+          `).join('');
+
+          this.els.citySuggestDropdown.querySelectorAll('.suggest-item').forEach(el => {
+            el.addEventListener('click', () => {
+              const name = el.getAttribute('data-name');
+              const lat = parseFloat(el.getAttribute('data-lat'));
+              const lon = parseFloat(el.getAttribute('data-lon'));
+              this.els.citySearchInput.value = name;
+              this.hideSuggestions();
+              this.loadCity(name, lat, lon);
+            });
+          });
+
+          this.els.citySuggestDropdown.classList.add('show');
+        }
+
+        hideSuggestions() {
+          this.els.citySuggestDropdown.classList.remove('show');
+        }
+
+        /* ---------------- Load & Fetch Station Telemetry ---------------- */
+        async loadCity(name, lat, lon) {
+          this.showLoading();
+
+          // 1. Check local rich presets
+          let station = PRESET_STATIONS.find(s => s.name.toLowerCase() === name.trim().toLowerCase());
+
+          // 2. If coordinates are provided or not found in presets, query Open-Meteo
+          if (!station && (!lat || !lon)) {
+            try {
+              const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`);
+              if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                if (geoData.results && geoData.results.length) {
+                  const res = geoData.results[0];
+                  name = res.name;
+                  lat = res.latitude;
+                  lon = res.longitude;
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (lat && lon && !station) {
+            try {
+              station = await this.fetchLiveMeteo(name, lat, lon);
+              this.els.dataSourceLabel.innerHTML = 'Live API &bull; Open-Meteo';
+            } catch (err) {
+              console.warn("Live API fetch failed, checking fallback:", err);
+            }
+          }
+
+          if (station) {
+            this.currentStation = station;
+            this.renderStationTelemetry(station);
+            this.updateChartData();
+            this.updateMapPosition(station.lat, station.lon, station.name);
+            this.updateFavoriteIcon();
+            this.renderQuickChips();
+            this.fxCanvas.setCondition(station.cond);
+            this.hideLoading();
+            this.els.lastUpdatedClock.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } else {
+            this.showNotFound(name);
+          }
+        }
+
+        async fetchLiveMeteo(name, lat, lon) {
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,uv_index&hourly=temperature_2m,weather_code,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max&timezone=auto`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("Forecast API error");
+          const data = await res.json();
+
+          const c = data.current;
+          const cond = this.mapWeatherCode(c.weather_code);
+
+          // Hourly mapping
+          const hourly = [];
+          const nowIdx = new Date().getHours();
+          for (let i = 0; i < 12; i++) {
+            const hIdx = (nowIdx + i) % 24;
+            const hourDate = new Date(data.hourly.time[nowIdx + i] || Date.now() + i * 3600000);
+            hourly.push({
+              time: hourDate.toLocaleTimeString([], { hour: 'numeric' }),
+              hourNum: hourDate.getHours(),
+              tempC: Math.round(data.hourly.temperature_2m[nowIdx + i] || c.temperature_2m),
+              cond: this.mapWeatherCode(data.hourly.weather_code[nowIdx + i]),
+              rainProb: data.hourly.precipitation_probability ? data.hourly.precipitation_probability[nowIdx + i] : 0
+            });
+          }
+
+          // Daily mapping
+          const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+          const daily = [];
+          for (let d = 0; d < Math.min(7, data.daily.time.length); d++) {
+            const dObj = new Date(data.daily.time[d]);
+            daily.push({
+              day: dayNames[dObj.getDay()],
+              hiC: Math.round(data.daily.temperature_2m_max[d]),
+              loC: Math.round(data.daily.temperature_2m_min[d]),
+              cond: this.mapWeatherCode(data.daily.weather_code[d])
+            });
+          }
+
+          return {
+            name: name,
+            country: data.timezone.split('/')[1]?.replace('_', ' ') || "Observatory",
+            lat: lat,
+            lon: lon,
+            tz: data.timezone_abbreviation || "Local",
+            cond: cond,
+            tempC: Math.round(c.temperature_2m),
+            feelsC: Math.round(c.apparent_temperature),
+            dewPointC: Math.round(c.temperature_2m - ((100 - c.relative_humidity_2m) / 5)),
+            humidity: Math.round(c.relative_humidity_2m),
+            windKph: Math.round(c.wind_speed_10m),
+            windDir: Math.round(c.wind_direction_10m),
+            pressure: Math.round(c.surface_pressure),
+            uvIndex: c.uv_index || (data.daily.uv_index_max ? data.daily.uv_index_max[0] : 5.0),
+            visibilityKm: 10.0,
+            cloudCover: cond === 'clear' ? 10 : cond === 'cloudy' ? 75 : 90,
+            sunrise: data.daily.sunrise && data.daily.sunrise[0] ? new Date(data.daily.sunrise[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "6:00 AM",
+            sunset: data.daily.sunset && data.daily.sunset[0] ? new Date(data.daily.sunset[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "6:00 PM",
+            hourly: hourly,
+            daily: daily
+          };
+        }
+
+        mapWeatherCode(code) {
+          if (code === 0) return "clear";
+          if ([1, 2, 3].includes(code)) return "cloudy";
+          if ([45, 48].includes(code)) return "fog";
+          if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return "rain";
+          if ([71, 73, 75, 77, 85, 86].includes(code)) return "snow";
+          if ([95, 96, 99].includes(code)) return "storm";
+          return "cloudy";
+        }
+
+        /* ---------------- Render Telemetry to DOM ---------------- */
+        renderStationTelemetry(s) {
+          document.body.className = `cond-${s.cond}`;
+
+          const meta = getConditionMeta(s.cond);
+          this.els.stationTitle.textContent = `${s.name}, ${s.country}`;
+          this.els.stationCoordinates.innerHTML = `<i class="bi bi-compass"></i> Lat: ${s.lat.toFixed(4)}° &bull; Lon: ${s.lon.toFixed(4)}° &bull; Elev: Station Active`;
+          this.els.heroCondBadge.innerHTML = `<i class="bi ${meta.icon}"></i> <span>${meta.label}</span>`;
+          this.els.heroStationTz.textContent = s.tz;
+          this.els.heroWeatherSvg.innerHTML = SVG_ICONS[s.cond](76);
+          this.els.heroTemp.innerHTML = `${this.fmtTemp(s.tempC)}<sup id="heroUnitSup">°${this.unit}</sup>`;
+          this.els.heroFeelsLike.textContent = `${this.fmtTemp(s.feelsC)}°${this.unit}`;
+          this.els.heroDewPoint.textContent = `${this.fmtTemp(s.dewPointC)}°${this.unit}`;
+
+          // High / Low for today
+          const todayDaily = s.daily && s.daily[0] ? s.daily[0] : { hiC: s.tempC + 2, loC: s.tempC - 4 };
+          this.els.heroHighLow.textContent = `${this.fmtTemp(todayDaily.hiC)}° / ${this.fmtTemp(todayDaily.loC)}°`;
+          this.els.heroRainChance.textContent = `${s.hourly && s.hourly[0] ? s.hourly[0].rainProb : 15}%`;
+
+          // Relative Humidity Gauge
+          this.els.gaugeHumidityVal.textContent = s.humidity;
+          this.els.gaugeDewPointVal.textContent = `${this.fmtTemp(s.dewPointC)}°${this.unit}`;
+          const humCirc = 2 * Math.PI * 54;
+          const humOffset = humCirc - (s.humidity / 100) * humCirc;
+          this.els.humidityArcFill.style.strokeDashoffset = humOffset;
+          this.els.humidityStatusBadge.textContent = s.humidity > 75 ? "Muggy" : s.humidity > 40 ? "Comfortable" : "Dry";
+
+          // Wind Gauge
+          const windUnitLabel = this.unit === 'C' ? 'km/h' : 'mph';
+          const windDisplayVal = this.unit === 'C' ? s.windKph : Math.round(s.windKph * 0.621371);
+          this.els.gaugeWindVal.textContent = windDisplayVal;
+          this.els.gaugeWindUnit.textContent = windUnitLabel;
+          this.els.gaugeWindDeg.textContent = `${s.windDir}°`;
+          this.els.gaugeWindDirText.textContent = this.degToCompass(s.windDir);
+          this.els.windCompassNeedle.style.transform = `rotate(${s.windDir}deg)`;
+          this.els.windBeaufortBadge.textContent = this.getBeaufortScale(s.windKph);
+          this.els.windGustText.textContent = `Peak gusts up to ${Math.round(windDisplayVal * 1.35)} ${windUnitLabel}`;
+
+          // Barometer Pressure Gauge
+          this.els.gaugePressureVal.textContent = s.pressure;
+          const pressMin = 970, pressMax = 1040;
+          const pressRatio = Math.max(0, Math.min(1, (s.pressure - pressMin) / (pressMax - pressMin)));
+          const pressCirc = 2 * Math.PI * 54;
+          this.els.pressureArcFill.style.strokeDashoffset = pressCirc - (pressRatio * pressCirc);
+
+          // Environmental Diagnostics
+          this.els.uvIndexVal.textContent = s.uvIndex.toFixed(1);
+          const uvPct = Math.min(100, (s.uvIndex / 12) * 100);
+          this.els.uvProgressBar.style.width = `${uvPct}%`;
+          this.els.uvIndexBadge.textContent = s.uvIndex > 8 ? "Very High" : s.uvIndex > 5 ? "High" : s.uvIndex > 2 ? "Moderate" : "Low";
+
+          this.els.visibilityVal.textContent = s.visibilityKm.toFixed(1);
+          this.els.cloudCoverVal.textContent = s.cloudCover;
+          this.els.cloudCoverProgressBar.style.width = `${s.cloudCover}%`;
+          this.els.sunriseTimeVal.textContent = s.sunrise;
+          this.els.sunsetTimeVal.textContent = s.sunset;
+
+          // Render Hourly Carousel
+          this.renderHourlyCarousel(s.hourly);
+          // Render Daily 7-day List
+          this.renderDailyForecast(s.daily);
+        }
+
+        renderHourlyCarousel(hourly) {
+          if (!hourly) return;
+          this.els.hourlyCarouselStrip.innerHTML = hourly.map((h, i) => `
+            <div class="hourly-item ${i === 0 ? 'now-hour' : ''}">
+              <div class="text-secondary font-mono small mb-1">${i === 0 ? 'Now' : h.time}</div>
+              <div class="my-2">${SVG_ICONS[h.cond](32)}</div>
+              <div class="font-display fw-bold text-white fs-5">${this.fmtTemp(h.tempC)}°</div>
+              <div class="font-mono text-info mt-1" style="font-size:0.7rem;">
+                <i class="bi bi-droplet-fill"></i> ${h.rainProb}%
+              </div>
+            </div>
+          `).join('');
+        }
+
+        renderDailyForecast(daily) {
+          if (!daily) return;
+          // Calculate max and min across the 7 days to scale bars accurately
+          const allHi = daily.map(d => d.hiC);
+          const allLo = daily.map(d => d.loC);
+          const minT = Math.min(...allLo);
+          const maxT = Math.max(...allHi);
+          const range = maxT - minT || 1;
+
+          this.els.dailyForecastContainer.innerHTML = daily.map(d => {
+            const leftPct = ((d.loC - minT) / range) * 80;
+            const widthPct = Math.max(16, ((d.hiC - d.loC) / range) * 80);
+            return `
+              <div class="day-row-card d-flex align-items-center justify-content-between gap-3">
+                <div style="width: 70px;" class="fw-bold font-display text-white">${d.day}</div>
+                <div class="d-flex align-items-center gap-2" style="width: 140px;">
+                  ${SVG_ICONS[d.cond](28)}
+                  <span class="small text-secondary font-mono text-capitalize">${d.cond}</span>
+                </div>
+                <div class="flex-grow-1 d-none d-sm-block px-3">
+                  <div class="temp-range-bar-track">
+                    <div class="temp-range-bar-fill" style="left: ${leftPct}%; width: ${widthPct}%;"></div>
+                  </div>
+                </div>
+                <div class="font-mono text-end" style="width: 110px;">
+                  <strong class="text-white">${this.fmtTemp(d.hiC)}°</strong>
+                  <span class="text-secondary ms-2">${this.fmtTemp(d.loC)}°</span>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        /* ---------------- Chart.js 24h Visualizer ---------------- */
+        initChart() {
+          const ctx = document.getElementById('weatherTrendChart').getContext('2d');
+          this.trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: [],
+              datasets: [{
+                label: 'Temperature',
+                data: [],
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.42,
+                pointBackgroundColor: '#f59e0b',
+                pointRadius: 4,
+                pointHoverRadius: 7
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  backgroundColor: 'rgba(13, 19, 34, 0.95)',
+                  borderColor: 'rgba(255, 255, 255, 0.15)',
+                  borderWidth: 1,
+                  titleFont: { family: 'Plus Jakarta Sans', size: 13, weight: 'bold' },
+                  bodyFont: { family: 'JetBrains Mono', size: 12 },
+                  padding: 12,
+                  cornerRadius: 10
+                }
+              },
+              scales: {
+                x: {
+                  grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                  ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+                },
+                y: {
+                  grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                  ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+                }
+              }
+            }
+          });
+        }
+
+        setChartMetric(metric) {
+          this.chartMetric = metric;
+          document.getElementById('btnChartMetricTemp').classList.toggle('active', metric === 'temp');
+          document.getElementById('btnChartMetricRain').classList.toggle('active', metric === 'rain');
+          document.getElementById('btnChartMetricWind').classList.toggle('active', metric === 'wind');
+          this.updateChartData();
+        }
+
+        updateChartData() {
+          if (!this.trendChart || !this.currentStation || !this.currentStation.hourly) return;
+          const h = this.currentStation.hourly;
+          const labels = h.map(item => item.time);
+
+          let dataValues = [];
+          let color = '#f59e0b';
+          let fillBg = 'rgba(245, 158, 11, 0.15)';
+          let label = 'Temperature';
+
+          if (this.chartMetric === 'temp') {
+            dataValues = h.map(item => this.fmtTemp(item.tempC));
+            label = `Temperature (°${this.unit})`;
+            color = '#f59e0b';
+            fillBg = 'rgba(245, 158, 11, 0.15)';
+          } else if (this.chartMetric === 'rain') {
+            dataValues = h.map(item => item.rainProb);
+            label = 'Precipitation Probability (%)';
+            color = '#38bdf8';
+            fillBg = 'rgba(56, 189, 248, 0.18)';
+          } else if (this.chartMetric === 'wind') {
+            const windMult = this.unit === 'C' ? 1 : 0.621371;
+            dataValues = h.map(item => Math.round((this.currentStation.windKph + (item.hourNum % 5) - 2) * windMult));
+            label = `Wind Velocity (${this.unit === 'C' ? 'km/h' : 'mph'})`;
+            color = '#10b981';
+            fillBg = 'rgba(16, 185, 129, 0.15)';
+          }
+
+          this.trendChart.data.labels = labels;
+          this.trendChart.data.datasets[0].label = label;
+          this.trendChart.data.datasets[0].data = dataValues;
+          this.trendChart.data.datasets[0].borderColor = color;
+          this.trendChart.data.datasets[0].backgroundColor = fillBg;
+          this.trendChart.data.datasets[0].pointBackgroundColor = color;
+          this.trendChart.update();
+        }
+
+        /* ---------------- Leaflet Station Map ---------------- */
+        initLeafletMap() {
+          this.stationMap = L.map('stationMap', {
+            center: [6.9271, 79.8612],
+            zoom: 11,
+            zoomControl: true
+          });
+
+          // -------------------------------------------------------
+          // All Esri ArcGIS Online tile layers:
+          //   • Completely FREE — no API key, no account required
+          //   • Work from ANY origin: file://, localhost, or deployed
+          //   • No referrer restrictions — OSM blocks file:// requests
+          // -------------------------------------------------------
+
+          // 1. Street Map — closest look to OSM, full worldwide coverage
+          const esriStreet = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution: 'Tiles &copy; <a href="https://www.esri.com/" target="_blank">Esri</a> &mdash; ' +
+                'Source: Esri, HERE, Garmin, USGS, Intermap, NRCAN, METI, OpenStreetMap, iPC',
+              maxZoom: 19
+            }
+          );
+
+          // 2. Satellite Imagery — high-res aerial photography
+          const esriSatellite = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution: 'Tiles &copy; <a href="https://www.esri.com/" target="_blank">Esri</a> &mdash; ' +
+                'Source: Esri, Maxar, GeoEye, Earthstar Geographics, USDA FSA, USGS, AeroGRID',
+              maxZoom: 18
+            }
+          );
+
+          // 3. Topographic — detailed terrain and elevation lines
+          const esriTopo = L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution: 'Tiles &copy; <a href="https://www.esri.com/" target="_blank">Esri</a> &mdash; ' +
+                'Source: Esri, USGS, NOAA, NPS',
+              maxZoom: 18
+            }
+          );
+
+          // Add Street Map as the default active layer
+          esriStreet.addTo(this.stationMap);
+
+          // Layer switcher control — all 3 layers, top-right corner
+          L.control.layers(
+            {
+              '&#x1F5FA; Street Map': esriStreet,
+              '&#x1F6F0; Satellite': esriSatellite,
+              '&#x26F0; Topographic': esriTopo
+            },
+            {},
+            { position: 'topright', collapsed: false }
+          ).addTo(this.stationMap);
+
+          // Glowing amber station pin marker
+          const customIcon = L.divIcon({
+            className: '',
+            html: `<div style="
+              width:20px; height:20px; border-radius:50%;
+              background:#f59e0b;
+              border:3px solid #ffffff;
+              box-shadow:0 0 0 5px rgba(245,158,11,0.3), 0 0 22px rgba(245,158,11,0.8);
+            "></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+            popupAnchor: [0, -12]
+          });
+
+          this.stationMapMarker = L.marker([6.9271, 79.8612], { icon: customIcon }).addTo(this.stationMap);
+
+          // Update legend below the map
+          const legendEl = document.getElementById('mapLayerLegend');
+          if (legendEl) {
+            legendEl.innerHTML = 'Esri ArcGIS Online &bull; Free, No API Key &bull; ' +
+              'Street Map / Satellite / Topographic &bull; Real-time station pin';
+          }
+        }
+
+        updateMapPosition(lat, lon, title) {
+          if (!this.stationMap) return;
+          this.stationMap.setView([lat, lon], 11);
+          this.stationMapMarker.setLatLng([lat, lon]);
+          this.stationMapMarker.bindPopup(`<strong>${title} Observatory</strong><br>Telemetry active & synchronized`).openPopup();
+          document.getElementById('mapCoordinatesLabel').textContent = `Lat: ${lat.toFixed(4)}°, Lon: ${lon.toFixed(4)}°`;
+        }
+
+        recenterMap() {
+          if (this.currentStation && this.stationMap) {
+            this.stationMap.setView([this.currentStation.lat, this.currentStation.lon], 11);
+          }
+        }
+
+        /* ---------------- Helper Utilities ---------------- */
+        degToCompass(deg) {
+          const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+          return dirs[Math.round(deg / 22.5) % 16];
+        }
+
+        getBeaufortScale(kph) {
+          if (kph < 2) return "Calm";
+          if (kph < 6) return "Light Air";
+          if (kph < 12) return "Light Breeze";
+          if (kph < 20) return "Gentle Breeze";
+          if (kph < 29) return "Moderate Breeze";
+          if (kph < 39) return "Fresh Breeze";
+          if (kph < 50) return "Strong Breeze";
+          return "High Wind";
+        }
+
+        updateClock() {
+          const d = new Date();
+          this.els.stationLocalTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        showLoading() {
+          this.els.stationNotFoundAlert.classList.add('d-none');
+          this.els.stationSkeleton.classList.remove('d-none');
+          this.els.stationTabContent.classList.add('d-none');
+        }
+
+        hideLoading() {
+          this.els.stationSkeleton.classList.add('d-none');
+          this.els.stationTabContent.classList.remove('d-none');
+        }
+
+        showNotFound(cityName) {
+          this.els.stationSkeleton.classList.add('d-none');
+          this.els.stationTabContent.classList.add('d-none');
+          document.getElementById('notFoundMsg').textContent = `We could not retrieve atmospheric telemetry for "${cityName}". Please try one of our featured stations or verify spelling.`;
+          this.els.stationNotFoundAlert.classList.remove('d-none');
+        }
+
+        showToast(msg) {
+          this.els.toastMessage.textContent = msg;
+          this.toast.show();
+        }
+      }
+
+      // Initialize Application on DOM Ready
+      document.addEventListener('DOMContentLoaded', () => {
+        window.app = new WeatherStationApp();
+      });
+    })();
+  </script>
+</body>
+</html>
